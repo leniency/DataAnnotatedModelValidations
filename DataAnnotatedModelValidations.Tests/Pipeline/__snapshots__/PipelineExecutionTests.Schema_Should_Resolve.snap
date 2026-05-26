@@ -27,6 +27,7 @@ type Query {
   sampleIgnoreValidation(obj: SampleInput): Sample
   sampleWithService(obj: SampleInput): Sample
   invalidRecord(obj: InvalidRecordInput!): InvalidRecord
+  nestedParent: NestedParent
   info: String!
   samples(
     skip: Int
@@ -86,6 +87,7 @@ type InvalidRecord {
 }
 
 type NestedChild {
+  specialCount(input: NestedChildCountInput!): [String!]
   count: Int!
 }
 
@@ -207,6 +209,10 @@ input IntOperationFilterInput {
 
 input InvalidRecordInput {
   text: String!
+}
+
+input NestedChildCountInput {
+  take: Int!
 }
 
 input NestedChildInput {

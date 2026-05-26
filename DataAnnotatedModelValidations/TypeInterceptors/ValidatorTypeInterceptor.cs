@@ -4,18 +4,19 @@ using System.Reflection;
 
 namespace DataAnnotatedModelValidations.TypeInterceptors;
 
-public sealed class ValidatorTypeInterceptor : TypeInterceptor
+public sealed class ValidatorTypeInterceptor(bool bindUsingRootTypeFields = true) : TypeInterceptor
 {
     private FieldMiddleware? _validatorMiddleware;
 
     private FieldMiddleware ValidatorMiddleware =>
         _validatorMiddleware ??= FieldClassMiddlewareFactory.Create<ValidatorMiddleware>();
 
-    private static IBindableList<ObjectFieldConfiguration>? ObjectTypeDefinitionFields(TypeSystemConfiguration? configuration) =>
-        configuration switch
+    private IBindableList<ObjectFieldConfiguration>? GetFields(TypeSystemConfiguration? configuration) =>
+        (bindUsingRootTypeFields, configuration) switch
         {
-            ObjectTypeConfiguration { Fields.Count: > 0 } objectTypeConfiguration
-                when IsRootOperationType(objectTypeConfiguration) => objectTypeConfiguration.Fields,
+            (true, ObjectTypeConfiguration { Fields: { Count: > 0 } fields } def)
+                when IsRootOperationType(def) => fields,
+            (false, ObjectTypeConfiguration { Fields: { Count: > 0 } fields }) => fields,
             _ => default
         };
 
@@ -50,7 +51,7 @@ public sealed class ValidatorTypeInterceptor : TypeInterceptor
 
     public override void OnAfterInitialize(ITypeDiscoveryContext discoveryContext, TypeSystemConfiguration configuration)
     {
-        if (ObjectTypeDefinitionFields(configuration) is not { } fields)
+        if (GetFields(configuration) is not { } fields)
         {
             return;
         }

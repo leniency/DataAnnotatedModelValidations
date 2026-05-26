@@ -20,6 +20,7 @@ In addition, individual method arguments can be validated using annotations from
 
 | HotChocolate Version | DataAnnotatedModelValidations Version | .NET Version  |
 | -------------------- | ------------------------------------- | ------------- |
+| 16.0.9 or higher     | 11.0.2                                | .NET 8, 9, 10 |
 | 16.0.9 or higher     | 11.0.1                                | .NET 8, 9, 10 |
 | 16.0.0 or higher     | 11.0.0                                | .NET 8, 9, 10 |
 
@@ -27,7 +28,7 @@ In addition, individual method arguments can be validated using annotations from
 
 | HotChocolate Version | Last DataAnnotatedModelValidations Version | .NET Version  |
 | -------------------- | ------------------------------------------ | ------------- |
-| 15.1.11 or higher    | 10.0.0                                     | .NET 8, 9, 10 |
+| 15.1.16 or higher    | 10.0.1                                     | .NET 8, 9, 10 |
 | 15.1.11 or higher    | 9.0.0                                      | .NET 8, 9, 10 |
 | 15.0.3 or higher     | 8.1.2                                      | .NET 8, 9     |
 | 15.0.3 or higher     | 7.0.0                                      | .NET 8, 9     |
@@ -55,6 +56,82 @@ public void ConfigureServices(IServiceCollection services)
         .AddDataAnnotationsValidator()
         .AddQueryType<Query>();
     // ...
+}
+```
+
+### Options
+
+Optionally you can set the flag `bindUsingRootTypeFields` to `true` (default) or `false` ex. `.AddDataAnnotationsValidator(bindUsingRootTypeFields: false)`;
+
+When bindUsingRootTypeFields is set to false it will enable validation on nested resolvers.
+
+ex.
+
+```csharp
+public class DemoQuery
+{
+    public SampleWithNestedResolver GetItem() => new();
+}
+
+public record SampleWithNestedResolver
+{
+    public string GetEmail(SampleWithNestedResolverValidatedInput input) => input.Email;
+}
+
+public record SampleWithNestedResolverValidatedInput
+{
+    [StringLength(100, MinimumLength = 5)]
+    public string Email { get; set; } = string.Empty;
+}
+```
+
+```graphql
+{
+  item {
+    email(input: { email: "abc" })
+  }
+}
+```
+
+#### bindUsingRootTypeFields: false
+
+> The email property should be validated in this case
+
+```json
+{
+  "errors": [
+    {
+      "message": "The field Email must be a string with a minimum length of 5 and a maximum length of 100.",
+      "locations": [
+        {
+          "line": 3,
+          "column": 9
+        }
+      ],
+      "path": ["item", "email", "input", "email"],
+      "extensions": {
+        "code": "DAMV-400",
+        "field": "email",
+        "type": "SampleWithNestedResolver",
+        "specifiedBy": "https://spec.graphql.org/June2018/#sec-Values-of-Correct-Type"
+      }
+    }
+  ],
+  "data": null
+}
+```
+
+#### bindUsingRootTypeFields: true
+
+> The email property should be not be validated in this case
+
+```json
+{
+  "data": {
+    "item": {
+      "email": "abc"
+    }
+  }
 }
 ```
 

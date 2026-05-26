@@ -1,0 +1,21 @@
+﻿{
+  "errors": [
+    {
+      "message": "The Name field is required.",
+      "path": [
+        "setSampleRecordWithSynthesizedProperty",
+        "obj",
+        "name"
+      ],
+      "extensions": {
+        "code": "DAMV-400",
+        "field": "setSampleRecordWithSynthesizedProperty",
+        "type": "Mutation",
+        "specifiedBy": "https://spec.graphql.org/June2018/#sec-Values-of-Correct-Type"
+      }
+    }
+  ],
+  "data": {
+    "setSampleRecordWithSynthesizedProperty": null
+  }
+}

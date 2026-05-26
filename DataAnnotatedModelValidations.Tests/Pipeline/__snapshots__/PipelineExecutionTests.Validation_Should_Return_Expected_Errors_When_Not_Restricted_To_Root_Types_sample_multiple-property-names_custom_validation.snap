@@ -1,0 +1,61 @@
+﻿{
+  "errors": [
+    {
+      "message": "multiple-property-names",
+      "path": [
+        "sample",
+        "obj"
+      ],
+      "extensions": {
+        "code": "DAMV-400",
+        "field": "sample",
+        "type": "Query",
+        "specifiedBy": "https://spec.graphql.org/June2018/#sec-Values-of-Correct-Type"
+      }
+    },
+    {
+      "message": "multiple-property-names",
+      "path": [
+        "sample",
+        "obj"
+      ],
+      "extensions": {
+        "code": "DAMV-400",
+        "field": "sample",
+        "type": "Query",
+        "specifiedBy": "https://spec.graphql.org/June2018/#sec-Values-of-Correct-Type"
+      }
+    },
+    {
+      "message": "multiple-property-names",
+      "path": [
+        "sample",
+        "obj",
+        "hello"
+      ],
+      "extensions": {
+        "code": "DAMV-400",
+        "field": "sample",
+        "type": "Query",
+        "specifiedBy": "https://spec.graphql.org/June2018/#sec-Values-of-Correct-Type"
+      }
+    },
+    {
+      "message": "multiple-property-names",
+      "path": [
+        "sample",
+        "obj",
+        "world"
+      ],
+      "extensions": {
+        "code": "DAMV-400",
+        "field": "sample",
+        "type": "Query",
+        "specifiedBy": "https://spec.graphql.org/June2018/#sec-Values-of-Correct-Type"
+      }
+    }
+  ],
+  "data": {
+    "sample": null
+  }
+}
