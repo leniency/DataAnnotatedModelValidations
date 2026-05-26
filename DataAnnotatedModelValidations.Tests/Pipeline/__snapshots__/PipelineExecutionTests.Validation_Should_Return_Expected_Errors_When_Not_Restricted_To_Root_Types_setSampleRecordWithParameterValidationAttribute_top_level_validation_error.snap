@@ -1,0 +1,20 @@
+﻿{
+  "errors": [
+    {
+      "message": "All string fields must be filled.",
+      "path": [
+        "setSampleRecordWithParameterValidationAttribute",
+        "obj"
+      ],
+      "extensions": {
+        "code": "DAMV-400",
+        "field": "setSampleRecordWithParameterValidationAttribute",
+        "type": "Mutation",
+        "specifiedBy": "https://spec.graphql.org/June2018/#sec-Values-of-Correct-Type"
+      }
+    }
+  ],
+  "data": {
+    "setSampleRecordWithParameterValidationAttribute": null
+  }
+}

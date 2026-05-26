@@ -38,6 +38,25 @@ public partial class PipelineExecutionTests
         result.MatchSnapshot();
     }
 
+    public async Task<IExecutionResult> ExecuteQueryWithFilterSortPaginationDefinitions(string query, bool bindUsingRootTypeFields) =>
+        await new ServiceCollection()
+            .AddSingleton<MockService>()
+            .AddGraphQLServer()
+            .ModifyPagingOptions(options =>
+            {
+                options.RequirePagingBoundaries = false;
+                options.DefaultPageSize = 10;
+                options.MaxPageSize = 100;
+            })
+            .ModifyCostOptions(options => options.EnforceCostLimits = false)
+            .AddDataAnnotationsValidator(bindUsingRootTypeFields)
+            .AddQueryType<Query>()
+            .AddTypeExtension<SampleExtension>()
+            .AddSorting()
+            .AddFiltering()
+            .AddQueryContext()
+            .ExecuteRequestAsync(query);
+
     [Theory]
     [InlineData(
         """
@@ -91,32 +110,127 @@ public partial class PipelineExecutionTests
         """,
         "with_query_context"
     )]
+    [InlineData(
+        """
+        {
+            nestedParent {
+                child { 
+                    count
+                    specialCount(input: { take: 22 })
+                }
+                children {
+                    count
+                    specialCount(input: { take: 33 })
+                }
+            }
+        }
+        """,
+        "nested_inner_resolver"
+    )]
     public async Task Get_Data_With_Filter_Sort_And_Or_Pagination_Definitions_Present_Should_Return_Expected_Data(string query, string description)
     {
-        var requestExecutor =
-            await new ServiceCollection()
-                .AddSingleton<MockService>()
-                .AddGraphQLServer()
-                .ModifyPagingOptions(options =>
-                {
-                    options.RequirePagingBoundaries = false;
-                    options.DefaultPageSize = 10;
-                    options.MaxPageSize = 100;
-                })
-                .ModifyCostOptions(options => options.EnforceCostLimits = false)
-                .AddDataAnnotationsValidator()
-                .AddQueryType<Query>()
-                .AddTypeExtension<SampleExtension>()
-                .AddSorting()
-                .AddFiltering()
-                .AddQueryContext()
-                .BuildRequestExecutorAsync();
-
-        var result = await requestExecutor.ExecuteAsync(query);
+        var result = await ExecuteQueryWithFilterSortPaginationDefinitions(query, true);
 
         Assert.Empty(result.ExpectOperationResult().Errors);
         result.ExpectOperationResult().ToJson().MatchSnapshot(new SnapshotNameExtension($"{description}.snap"));
     }
+
+    [Theory]
+    [InlineData(
+        """
+        {
+            samples { 
+                items { 
+                    psf1: relatedpsf(
+                        take: 1
+                        skip: 1
+                        where: { name: { neq: "Alisson" } }
+                        order: { name: ASC }
+                    ) { items { name } }
+                    psf2: relatedpsf(
+                        skip: 1
+                        where: { name: { neq: "Jane" } }
+                        order: { name: ASC }
+                    ) { items { name } }
+                    psf3: relatedpsf(
+                        where: { name: { neq: "Jane" } }
+                        order: { name: ASC }
+                    ) { items { name } }
+                    psf4: relatedpsf(
+                        order: { name: ASC }
+                    ) { items { name } }
+                    psf5: relatedpsf { items { name } }
+                    relatedsf { name }
+                    relatedp { items { name } }
+                } 
+            }
+        }
+        """,
+        0,
+        "parent_item_with_children"
+    )]
+    [InlineData(
+        """
+        {
+            sampleResponses(
+                percentage: 10
+                take: 5
+                order: { name: ASC }
+                where: { name: { neq: "some name" } }
+            ) {
+                items {
+                    name
+                    info
+                    numberOfPets
+                    age
+                }
+            }
+        }
+        """,
+        0,
+        "with_query_context"
+    )]
+    [InlineData(
+        """
+        {
+            nestedParent {
+                child { 
+                    count
+                    specialCount(input: { take: 22 })
+                }
+                children {
+                    count
+                    specialCount(input: { take: 33 })
+                }
+            }
+        }
+        """,
+        2,
+        "nested_inner_resolver"
+    )]
+    public async Task Get_Data_With_Filter_Sort_And_Or_Pagination_Definitions_Present_Should_Return_Expected_Data_When_Not_Restricted_To_Root_Types(string query, int numberOfErrors, string description)
+    {
+        var result = await ExecuteQueryWithFilterSortPaginationDefinitions(query, false);
+
+        Assert.Equal(numberOfErrors, result.ExpectOperationResult().Errors.Count);
+        result.ExpectOperationResult().ToJson().MatchSnapshot(new SnapshotNameExtension($"{description}.snap"));
+    }
+
+    public async Task<IExecutionResult> ExecuteValidationQuery(string query, bool bindUsingRootTypeFields) =>
+        await new ServiceCollection()
+            .AddSingleton<MockService>()
+            .AddGraphQLServer()
+            .AddDataAnnotationsValidator(bindUsingRootTypeFields)
+            .AddQueryType<Query>()
+            .AddMutationType<Mutation>()
+            .AddTypeExtension<QueryExtension>()
+            .AddTypeExtension<MutationExtensionByName>()
+            .AddTypeExtension<MutationExtensionByOperationType>()
+            .AddTypeExtension<MutationExtensionByType>()
+            .AddTypeExtension<MutationExtensionGeneric>()
+            .AddSorting()
+            .AddFiltering()
+            .ExecuteRequestAsync(query);
 
     [Theory]
     [InlineData("""{ info }""", 0, "info")]
@@ -200,6 +314,23 @@ public partial class PipelineExecutionTests
         """,
         3,
         "setNestedParent_nested_validations"
+    )]
+    [InlineData(
+        """
+        mutation { 
+            setNestedParent(obj: { 
+                child: { count: 5 }
+                children: []
+            }) { 
+                child { 
+                    count
+                    specialCount(input: { take: 22 })
+                } 
+            } 
+        }
+        """,
+        0,
+        "setNestedParent_inner_resolver_validations"
     )]
     [InlineData(
         """
@@ -298,21 +429,209 @@ public partial class PipelineExecutionTests
     )]
     public async Task Validation_Should_Return_Expected_Errors(string query, int numberOfErrors, string description)
     {
-        var result =
-            await new ServiceCollection()
-                .AddSingleton<MockService>()
-                .AddGraphQLServer()
-                .AddDataAnnotationsValidator()
-                .AddQueryType<Query>()
-                .AddMutationType<Mutation>()
-                .AddTypeExtension<QueryExtension>()
-                .AddTypeExtension<MutationExtensionByName>()
-                .AddTypeExtension<MutationExtensionByOperationType>()
-                .AddTypeExtension<MutationExtensionByType>()
-                .AddTypeExtension<MutationExtensionGeneric>()
-                .AddSorting()
-                .AddFiltering()
-                .ExecuteRequestAsync(query);
+        var result = await ExecuteValidationQuery(query, true);
+
+        Assert.Equal(numberOfErrors, result.ExpectOperationResult().Errors?.Count);
+        result.ExpectOperationResult().ToJson().MatchSnapshot(new SnapshotNameExtension($"{description}.snap"));
+    }
+    [Theory]
+    [InlineData("""{ info }""", 0, "info")]
+    [InlineData("""{ message }""", 0, "message")]
+    [InlineData("""{ invalidRecord(obj: { text: "test" }) { text } }""", 1, "invalid_record")]
+    [InlineData("""{ invalidRecordExt(obj: { text: "test" }) { text } }""", 1, "invalid_record_ext")]
+    [InlineData("""{ sample(obj: null) { name } }""", 0, "sample_null_no_errors")]
+    [InlineData("""{ sample(obj: { name: "" }) { name } }""", 1, "sample_blank_name_required")]
+    [InlineData("""{ sample(obj: { name: "Jane" }) { name } }""", 0, "sample_no_errors")]
+    [InlineData("""{ sample(obj: { name: "ab" }) { name } }""", 1, "sample_min_length_3")]
+    [InlineData("""{ sample(obj: { name: "empty-property-name" }) { name } }""", 1, "sample_empty-property-name_custom_validation")]
+    [InlineData("""{ sample(obj: { name: "message-from-service" }) { name } }""", 1, "sample_message-from-service_custom_validation")]
+    [InlineData("""{ sample(obj: { name: "multiple-property-names" }) { name } }""", 4, "sample_multiple-property-names_custom_validation")]
+    [InlineData("""{ sample(obj: { name: "no-property-name" }) { name } }""", 1, "sample_no-property-name_custom_validation")]
+    [InlineData("""{ sample(obj: { name: "null-error-message" }) { name } }""", 1, "sample_null-error-message_custom_validation")]
+    [InlineData("""{ sample(obj: { name: null }) { name } }""", 1, "sample_required")]
+    [InlineData("""{ sampleAlias:sample(obj: { name: "" }) { name } }""", 1, "sample_alias_blank_name_required")]
+    [InlineData("""{ sampleIgnoreValidation(obj: null) { name } }""", 0, "sampleIgnoreValidation_no_errors")]
+    [InlineData("""{ sampleNonNull(obj: null) { name } }""", 1, "sampleNonNull_required")]
+    [InlineData("""{ sampleNonNull(obj: { name: "ab" }) { name } }""", 1, "sampleNonNull_min_length_3")]
+    [InlineData("""{ sampleWithService(obj: { name: "Jane" }) { name } }""", 0, "sampleWithService_no_errors")]
+    [InlineData("""{ text(txt: "abc") }""", 1, "text_min_length_5")]
+    [InlineData("""{ text(txt: "abcdefg") }""", 0, "text_no_errors")]
+    [InlineData("""{ textAlias:text(txt: "abc") }""", 1, "text_alias_min_length_5")]
+    [InlineData("""{ textIgnoreValidation(txt: "a") }""", 0, "textIgnoreValidation_no_errors")]
+    [InlineData("""mutation { setText(txt: "abc") }""", 1, "setText_min_length_5")]
+    [InlineData("""mutation { setSample(obj: { name: "" }) { name } }""", 1, "setSample_blank_name_required")]
+    [InlineData("""mutation { setSampleIgnoreValidation(obj: { name: "" }) { name } }""", 0, "setSampleIgnoreValidation_no_errors")]
+    [InlineData("""mutation { setSampleHcNullError(obj: { name: "" }) { name } }""", 2, "setSample_hc_null_error_blank_name_required")]
+    [InlineData("""mutation { setSampleRecord(obj: { name: "" }) { name } }""", 1, "setSampleRecord_blank_name_required")]
+    [InlineData("""mutation { setFunkyRecord(obj: { text: "" }) { text } }""", 0, "setFunkyRecord_no_errors")]
+    [InlineData("""mutation { setNoValidationRecord(obj: { text: "" }) { text } }""", 0, "setNoValidationRecord_no_errors")]
+    [InlineData(
+        """mutation { setSampleRecordWithSynthesizedProperty(obj: { name: "" }) { name } }""",
+        1,
+        "setSampleRecordWithSynthesizedProperty_blank_name_required"
+    )]
+    [InlineData(
+        """mutation { setSampleRecordWithClassLevelValidationAttribute(obj: { name: null info: null }) { name info } }""",
+        1,
+        "setSampleRecordWithClassLevelValidationAttribute_top_level_validation_error"
+    )]
+    [InlineData(
+        """mutation { setSampleRecordWithClassLevelValidationAttribute(obj: { name: "a" info: "info" }) { name info } }""",
+        1,
+        "setSampleRecordWithClassLevelValidationAttribute_invalid_name"
+    )]
+    [InlineData(
+        """mutation { setSampleRecordWithClassLevelValidationAttribute(obj: { name: "Jane" info: "info" }) { name info } }""",
+        0,
+        "setSampleRecordWithClassLevelValidationAttribute_no_errors"
+    )]
+    [InlineData("""mutation { setSampleRecordWithParameterValidationAttribute(obj: { name: "" info: "" }) { name info } }""",
+        1,
+        "setSampleRecordWithParameterValidationAttribute_top_level_validation_error"
+    )]
+    [InlineData(
+        """mutation { setSampleRecordWithParameterValidationAttribute(obj: { name: "a" info: "info"  }) { name info } }""",
+        1,
+        "setSampleRecordWithParameterValidationAttribute_invalid_name"
+    )]
+    [InlineData(
+        """mutation { setSampleRecordWithParameterValidationAttribute(obj: { name: "Jane" info: "info"  }) { name info } }""",
+        0,
+        "setSampleRecordWithParameterValidationAttribute_no_errors"
+    )]
+    [InlineData(
+        """
+        mutation { 
+            setNestedParent(obj: { 
+                child: { count: 0 }, 
+                children: [
+                    { count: 1 }, 
+                    { count: 0 }
+                ] 
+            }) { 
+                child { count } 
+                children { count } 
+            } 
+        }
+        """,
+        3,
+        "setNestedParent_nested_validations"
+    )]
+    [InlineData(
+        """
+        mutation { 
+            setNestedParent(obj: { 
+                child: { count: 5 }
+                children: []
+            }) { 
+                child { 
+                    count
+                    specialCount(input: { take: 22 })
+                } 
+            } 
+        }
+        """,
+        1,
+        "setNestedParent_inner_resolver_validations"
+    )]
+    [InlineData(
+        """
+        mutation { 
+            setNestedParent(obj: { 
+                child: { count: 0 }, 
+                children: [
+                    { count: 0 },
+                    { count: 1 }, 
+                    { count: 0 },
+                    { count: 1 }, 
+                    { count: 0 },
+                    { count: 1 }, 
+                    { count: 0 }
+                ] 
+            }) { 
+                child { count } 
+                children { count } 
+            } 
+        }
+        """,
+        6,
+        "setNestedParent_multiple_nested_validations"
+    )]
+    [InlineData(
+        """
+        mutation { 
+            setNestedParentExtByName(obj: { 
+                child: { count: 0 }, 
+                children: [
+                    { count: 1 }, 
+                    { count: 0 }
+                ] 
+            }) { 
+                child { count } 
+                children { count } 
+            } 
+        }
+        """,
+        3,
+        "setNestedParentExt_nested_validations_ext_byName"
+    )]
+    [InlineData(
+        """
+        mutation { 
+            setNestedParentExtByOpType(obj: { 
+                child: { count: 0 }, 
+                children: [
+                    { count: 1 }, 
+                    { count: 0 }
+                ] 
+            }) { 
+                child { count } 
+                children { count } 
+            } 
+        }
+        """,
+        3,
+        "setNestedParentExt_nested_validations_ext_byOpType"
+    )]
+    [InlineData(
+        """
+        mutation { 
+            setNestedParentExtByType(obj: { 
+                child: { count: 0 }, 
+                children: [
+                    { count: 1 }, 
+                    { count: 0 }
+                ] 
+            }) { 
+                child { count } 
+                children { count } 
+            } 
+        }
+        """,
+        3,
+        "setNestedParentExt_nested_validations_ext_byType"
+    )]
+    [InlineData(
+        """
+        mutation { 
+            setNestedParentExtGeneric(obj: { 
+                child: { count: 0 }, 
+                children: [
+                    { count: 1 }, 
+                    { count: 0 }
+                ] 
+            }) { 
+                child { count } 
+                children { count } 
+            } 
+        }
+        """,
+        3,
+        "setNestedParentExt_nested_validations_ext_generic"
+    )]
+    public async Task Validation_Should_Return_Expected_Errors_When_Not_Restricted_To_Root_Types(string query, int numberOfErrors, string description)
+    {
+        var result = await ExecuteValidationQuery(query, false);
 
         Assert.Equal(numberOfErrors, result.ExpectOperationResult().Errors?.Count);
         result.ExpectOperationResult().ToJson().MatchSnapshot(new SnapshotNameExtension($"{description}.snap"));

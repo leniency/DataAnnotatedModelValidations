@@ -1,0 +1,21 @@
+﻿{
+  "errors": [
+    {
+      "message": "The Name field is required.",
+      "path": [
+        "sample",
+        "obj",
+        "name"
+      ],
+      "extensions": {
+        "code": "DAMV-400",
+        "field": "sample",
+        "type": "Query",
+        "specifiedBy": "https://spec.graphql.org/June2018/#sec-Values-of-Correct-Type"
+      }
+    }
+  ],
+  "data": {
+    "sample": null
+  }
+}
