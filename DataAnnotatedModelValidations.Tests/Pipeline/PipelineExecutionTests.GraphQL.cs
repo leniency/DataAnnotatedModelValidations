@@ -23,8 +23,8 @@ public partial class PipelineExecutionTests
         public string GetMessage() => "Message";
 
         [UseOffsetPaging]
-        [UseSorting]
         [UseFiltering]
+        [UseSorting]
         public async Task<List<SampleResponse>> GetSampleResponses(
             [Range(0, 100)] double percentage,
             QueryContext<SampleResponse> queryContext,
